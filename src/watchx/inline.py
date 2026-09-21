@@ -1,0 +1,125 @@
+from __future__ import annotations
+
+import time
+import json
+import sys
+from datetime import datetime
+
+from rich.live import Live
+from rich.panel import Panel
+from rich.text import Text
+
+from watchx.config import WatchConfig
+from watchx.models import CommandSpec
+from watchx.runner import CommandRunner
+from watchx.status import StatusServer
+from watchx.models import Frame
+from watchx.session import write_frames
+
+
+def _render(spec: CommandSpec, result, frame: int, config: WatchConfig) -> Panel:
+    body = result.output_for(config.stderr).rstrip() or "<no output>"
+    status = "OK" if result.ok else f"EXIT {result.exit_code}"
+    footer = f"{status}  •  {result.duration_ms:.0f}ms"
+    if config.timestamp:
+        footer += f"  •  {datetime.now():%H:%M:%S}"
+    footer += f"  • refresh #{frame}"
+    text = Text(body)
+    return Panel(text, title=f" WATCHX  {spec.display} ", subtitle=footer)
+
+
+def _run_once(runner: CommandRunner, retries: int):
+    for attempt in range(retries + 1):
+        result = runner.run()
+        if result.ok or attempt == retries:
+            return result
+        time.sleep(min(1.0, 0.1 * (attempt + 1)))
+    raise RuntimeError("unreachable retry state")
+
+
+def _failed(result, config: WatchConfig) -> bool:
+    return not result.ok or result.alert_triggered(config.fail_if, config.stderr)
+
+
+def run_inline(
+    spec: CommandSpec,
+    config: WatchConfig,
+    plain: bool = False,
+    json_output: bool = False,
+) -> int:
+    runner = CommandRunner(
+        spec,
+        timeout_seconds=config.timeout_seconds,
+        max_output_bytes=config.max_output_bytes,
+        environment=config.environment,
+    )
+    captured: list[Frame] = []
+    latest: dict[str, object] = {"ok": False, "running": True, "sequence": 0}
+    status = StatusServer(config.status_port, lambda: dict(latest), config.status_token) if config.status_port else None
+
+    def record(command_result, sequence: int) -> bool:
+        triggered = command_result.alert_triggered(config.fail_if, config.stderr)
+        captured.append(
+            Frame(command_result, tuple(command_result.output_for(config.stderr).splitlines()), sequence)
+        )
+        latest.update(command_result.as_dict(sequence))
+        latest["alert_triggered"] = triggered
+        latest["ok"] = not _failed(command_result, config)
+        latest["running"] = False
+        return triggered
+
+    try:
+        if status:
+            status.start()
+            print(f"watchx status server: http://127.0.0.1:{status.port}/health", file=sys.stderr)
+            print(f"watchx status token: {status.token}", file=sys.stderr)
+        first = _run_once(runner, config.retries)
+        first_alert = record(first, 1)
+        if json_output:
+            payload = first.as_dict(1)
+            payload["alert_triggered"] = first_alert
+            payload["ok"] = not _failed(first, config)
+            print(json.dumps(payload, ensure_ascii=False), flush=True)
+            if config.once or (config.exit_on_error and _failed(first, config)):
+                return first.exit_code if not first.ok else (1 if payload["alert_triggered"] else 0)
+            frame = 1
+            while True:
+                time.sleep(config.interval_seconds)
+                frame += 1
+                result = _run_once(runner, config.retries)
+                alert_triggered = record(result, frame)
+                payload = result.as_dict(frame)
+                payload["alert_triggered"] = alert_triggered
+                payload["ok"] = not _failed(result, config)
+                print(json.dumps(payload, ensure_ascii=False), flush=True)
+                if config.exit_on_error and _failed(result, config):
+                    return result.exit_code or 1
+        if config.once:
+            if plain:
+                print(first.output_for(config.stderr).rstrip() or "<no output>")
+            else:
+                print(first.output_for(config.stderr).rstrip() or "<no output>")
+            return first.exit_code if not first.ok else (1 if first.alert_triggered(config.fail_if, config.stderr) else 0)
+        initial = Text(first.output_for(config.stderr).rstrip() or "<no output>") if plain else _render(spec, first, 1, config)
+        with Live(initial, refresh_per_second=12, screen=False) as live:
+            frame = 1
+            while True:
+                time.sleep(config.interval_seconds)
+                frame += 1
+                result = _run_once(runner, config.retries)
+                record(result, frame)
+                live.update(Text(result.output_for(config.stderr).rstrip() or "<no output>") if plain else _render(spec, result, frame, config), refresh=True)
+                if config.exit_on_error and _failed(result, config):
+                    return result.exit_code or 1
+    except KeyboardInterrupt:
+        return 130
+    finally:
+        if config.export_session:
+            write_frames(config.export_session, tuple(captured))
+        if status:
+            status.close()
+
+
+def run_plain(spec: CommandSpec, config: WatchConfig) -> int:
+    """Minimal live renderer for logs/scripts; intentionally no box UI."""
+    return run_inline(spec, config)

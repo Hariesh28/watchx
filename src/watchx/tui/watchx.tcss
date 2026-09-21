@@ -1,0 +1,99 @@
+Screen {
+    background: #090b10;
+    color: #d7dce5;
+}
+
+#brand {
+    height: 2;
+    content-align: center middle;
+    color: #f0f3f8;
+    text-style: bold;
+    background: #11151d;
+}
+
+#chrome {
+    height: 100%;
+}
+
+#command {
+    height: 2;
+    padding: 0 1;
+    color: #a8b1c0;
+    background: #0d1118;
+    border-bottom: solid #222b38;
+}
+
+#metrics {
+    height: 2;
+    padding: 0 1;
+    background: #0d1118;
+    color: #8994a5;
+}
+
+#state {
+    width: 1fr;
+}
+
+#stats {
+    width: 2fr;
+    text-align: center;
+}
+
+#clock {
+    width: 1fr;
+    text-align: right;
+}
+
+#output {
+    height: 1fr;
+    margin: 0 1;
+    padding: 1 1;
+    background: #090b10;
+    border: solid #222b38;
+    scrollbar-size: 1 1;
+}
+
+#search {
+    margin: 0 1;
+    height: 3;
+}
+
+.hidden {
+    display: none;
+}
+
+Footer {
+    background: #11151d;
+}
+
+HistoryScreen, HelpScreen {
+    align: center middle;
+    background: rgba(0, 0, 0, 0.75);
+}
+
+#dialog {
+    width: 52;
+    height: 22;
+    padding: 1 2;
+    background: #10151d;
+    border: round #394657;
+}
+
+#dialog-wide {
+    width: 90%;
+    height: 70%;
+    padding: 1;
+    background: #10151d;
+    border: round #394657;
+}
+
+#dialog-title {
+    height: 2;
+    content-align: center middle;
+    text-style: bold;
+    color: #f0f3f8;
+}
+
+DataTable {
+    height: 1fr;
+}
