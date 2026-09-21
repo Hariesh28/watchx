@@ -62,7 +62,9 @@ def test_runner_cancels_commands() -> None:
 
 
 def test_shell_command_text_preserves_intentional_syntax() -> None:
-    runner = CommandRunner(CommandSpec(("Get-Date", "-Format", "'HH:mm:ss.fff'"), shell="powershell"))
+    runner = CommandRunner(
+        CommandSpec(("Get-Date", "-Format", "'HH:mm:ss.fff'"), shell="powershell")
+    )
 
     argv, use_shell = runner._prepare()
 

@@ -47,7 +47,7 @@ def test_status_token_loads_from_config(tmp_path: Path) -> None:
 
 def test_invalid_stderr_mode_is_rejected(tmp_path: Path) -> None:
     path = tmp_path / "config.toml"
-    path.write_text("[watchx]\nstderr = \"nope\"\n", encoding="utf-8")
+    path.write_text('[watchx]\nstderr = "nope"\n', encoding="utf-8")
 
     try:
         load_config(path)

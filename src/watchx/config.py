@@ -85,7 +85,9 @@ def load_config(path: Path | None = None) -> WatchConfig:
     if "fail_if" in watch:
         updates["fail_if"] = str(watch["fail_if"]) or None
     if "environment" in watch and isinstance(watch["environment"], dict):
-        updates["environment"] = tuple((str(key), str(value)) for key, value in watch["environment"].items())
+        updates["environment"] = tuple(
+            (str(key), str(value)) for key, value in watch["environment"].items()
+        )
     if "status_port" in watch:
         updates["status_port"] = int(watch["status_port"])
     if "status_token" in watch:

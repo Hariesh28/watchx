@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
-import re
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,7 +32,11 @@ class CommandResult:
             return self.stdout
         if stderr_mode == "separate":
             if self.stderr:
-                return f"{self.stdout.rstrip()}\n\n--- stderr ---\n{self.stderr.rstrip()}" if self.stdout else self.stderr
+                return (
+                    f"{self.stdout.rstrip()}\n\n--- stderr ---\n{self.stderr.rstrip()}"
+                    if self.stdout
+                    else self.stderr
+                )
             return self.stdout
         if self.stdout and self.stderr:
             return f"{self.stdout.rstrip()}\n{self.stderr.rstrip()}"

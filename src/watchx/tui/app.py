@@ -18,8 +18,8 @@ from watchx.diff import diff_lines
 from watchx.history import FrameHistory
 from watchx.models import CommandResult, CommandSpec, Frame
 from watchx.runner import CommandCancelled, CommandRunner
-from watchx.status import StatusServer
 from watchx.session import write_frames
+from watchx.status import StatusServer
 
 
 class WatchXApp(App[int]):
@@ -67,7 +67,9 @@ class WatchXApp(App[int]):
         self.refresh_timer: Timer | None = None
         self.spinner_timer: Timer | None = None
         self.active_worker: Worker[CommandResult] | None = None
-        self.status_server = StatusServer(config.status_port, self._status_snapshot) if config.status_port else None
+        self.status_server = (
+            StatusServer(config.status_port, self._status_snapshot) if config.status_port else None
+        )
 
     def compose(self) -> ComposeResult:
         yield Static(id="brand")
@@ -84,7 +86,10 @@ class WatchXApp(App[int]):
     def on_mount(self) -> None:
         if self.status_server:
             self.status_server.start()
-            print(f"watchx status server: http://127.0.0.1:{self.status_server.port}/health", file=sys.stderr)
+            print(
+                f"watchx status server: http://127.0.0.1:{self.status_server.port}/health",
+                file=sys.stderr,
+            )
             print(f"watchx status token: {self.status_server.token}", file=sys.stderr)
         self._render_header()
         self.spinner_timer = self.set_interval(0.2, self._tick_spinner)
@@ -96,7 +101,9 @@ class WatchXApp(App[int]):
             return {"ok": False, "running": self.running, "sequence": self.sequence}
         payload = self.last_result.as_dict(self.sequence)
         payload["running"] = self.running
-        payload["alert_triggered"] = self.last_result.alert_triggered(self.config.fail_if, self.config.stderr)
+        payload["alert_triggered"] = self.last_result.alert_triggered(
+            self.config.fail_if, self.config.stderr
+        )
         payload["ok"] = not (not self.last_result.ok or payload["alert_triggered"])
         return payload
 
@@ -109,7 +116,9 @@ class WatchXApp(App[int]):
     def _reset_refresh_timer(self) -> None:
         if self.refresh_timer:
             self.refresh_timer.stop()
-        self.refresh_timer = self.set_interval(self.config.interval_seconds, self._scheduled_refresh)
+        self.refresh_timer = self.set_interval(
+            self.config.interval_seconds, self._scheduled_refresh
+        )
 
     def _scheduled_refresh(self) -> None:
         if not self.paused:
@@ -157,7 +166,9 @@ class WatchXApp(App[int]):
             return
         self.running = True
         self._render_status()
-        self.active_worker = self.run_worker(self._execute_once, thread=True, exclusive=False, exit_on_error=False)
+        self.active_worker = self.run_worker(
+            self._execute_once, thread=True, exclusive=False, exit_on_error=False
+        )
 
     def _execute_once(self) -> CommandResult:
         """Execute exactly one command invocation outside the UI event loop."""
@@ -224,7 +235,9 @@ class WatchXApp(App[int]):
             changed_label = "diff off"
 
         if not render_lines:
-            output.write(Text("<no matching output>" if self.search_term else "<no output>", style="dim"))
+            output.write(
+                Text("<no matching output>" if self.search_term else "<no output>", style="dim")
+            )
 
         if self.last_result:
             self.query_one("#stats", Static).update(

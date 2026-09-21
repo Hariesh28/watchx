@@ -79,7 +79,10 @@ class CommandRunner:
                     stdout, stderr = process.communicate(timeout=0.1)
                     break
                 except subprocess.TimeoutExpired:
-                    if self.timeout_seconds is not None and (time.perf_counter() - start) >= self.timeout_seconds:
+                    if (
+                        self.timeout_seconds is not None
+                        and (time.perf_counter() - start) >= self.timeout_seconds
+                    ):
                         timed_out = True
                         self._terminate(process)
                         stdout, stderr = process.communicate()

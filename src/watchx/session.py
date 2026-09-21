@@ -35,7 +35,7 @@ def write_frames(path: Path, frames: tuple[Frame, ...]) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         assert temporary_path is not None
-        os.replace(temporary_path, path)
+        temporary_path.replace(path)
         temporary_path = None
     finally:
         if temporary_path is not None:
@@ -59,7 +59,9 @@ def read_frames(path: Path) -> tuple[Frame, ...]:
                     timed_out=bool(data.get("timed_out", False)),
                 )
                 sequence = int(data["sequence"])
-                lines = tuple(str(item) for item in data.get("lines", result.combined_output.splitlines()))
+                lines = tuple(
+                    str(item) for item in data.get("lines", result.combined_output.splitlines())
+                )
                 captured_at = datetime.fromisoformat(data.get("captured_at", data["started_at"]))
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
                 raise ValueError(f"invalid session record at line {line_number}") from exc

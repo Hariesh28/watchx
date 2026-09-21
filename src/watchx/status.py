@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import hmac
+import json
 import secrets
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -12,7 +12,9 @@ from typing import Any
 class StatusServer:
     """Optional localhost health and metrics server without command output."""
 
-    def __init__(self, port: int, snapshot: Callable[[], dict[str, Any]], token: str | None = None) -> None:
+    def __init__(
+        self, port: int, snapshot: Callable[[], dict[str, Any]], token: str | None = None
+    ) -> None:
         self._snapshot = snapshot
         self.token = token or secrets.token_urlsafe(32)
         if len(self.token) < 16:

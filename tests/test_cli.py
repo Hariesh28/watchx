@@ -1,6 +1,12 @@
 import pytest
 
-from watchx.cli import build_parser, normalize_command, parse_duration, parse_environment, resolve_config
+from watchx.cli import (
+    build_parser,
+    normalize_command,
+    parse_duration,
+    parse_environment,
+    resolve_config,
+)
 
 
 def test_duration_parser() -> None:
