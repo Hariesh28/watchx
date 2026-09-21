@@ -67,6 +67,9 @@ of seconds:
 The interval must be greater than zero. Refreshes are sequential: a new
 invocation does not start while the previous invocation is still running.
 
+For a larger collection of ready-to-run scenarios, see the
+[`examples/COMMAND_COOKBOOK.md`](../examples/COMMAND_COOKBOOK.md) cookbook.
+
 ## 4. TUI controls
 
 | Key | Action |
@@ -209,14 +212,15 @@ Values may contain additional equals signs, for example
 Start the optional localhost-only status server:
 
 ```powershell
-watchx --status-port 8765 --json --plain kubectl get pods -A
+$token = "replace-with-a-secret-at-least-16-characters"
+watchx --status-port 8765 --status-token $token --json --plain kubectl get pods -A
 ```
 
 Query it from another terminal:
 
 ```powershell
-curl http://127.0.0.1:8765/health
-curl http://127.0.0.1:8765/metrics
+curl.exe -H "Authorization: Bearer $token" http://127.0.0.1:8765/health
+curl.exe -H "Authorization: Bearer $token" http://127.0.0.1:8765/metrics
 ```
 
 Both endpoints return the latest machine-readable snapshot. Use
@@ -224,8 +228,8 @@ Both endpoints return the latest machine-readable snapshot. Use
 for shell monitoring, use a fixed port. The server binds only to `127.0.0.1`
 and is disabled unless `--status-port` is supplied. Health and metrics never
 return captured stdout or stderr; use JSON output or session export when you
-explicitly need command contents. Requests require `Authorization: Bearer
-TOKEN`. watchx prints a cryptographically random token to stderr at startup;
+explicitly need command contents. Requests require an authorization token.
+watchx prints a cryptographically random token to stderr at startup;
 for automation, provide a stable token with `--status-token` or
 `status_token` in the config file:
 

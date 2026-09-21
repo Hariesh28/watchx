@@ -42,6 +42,7 @@ On macOS or Linux, replace activation with `source .venv/bin/activate`.
 Use `python -m watchx` if the `watchx` executable is not on `PATH`.
 
 For a complete guide, see [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md).
+For copy/paste scenarios, see the [`examples/COMMAND_COOKBOOK.md`](examples/COMMAND_COOKBOOK.md).
 
 ## Example
 
@@ -180,6 +181,7 @@ Command-line options override values from this file.
 - [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md): installation, usage, options, configuration, automation, troubleshooting, and development.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): code structure and execution flow.
 - [`docs/ROADMAP.md`](docs/ROADMAP.md): planned work.
+- [`examples/COMMAND_COOKBOOK.md`](examples/COMMAND_COOKBOOK.md): detailed command examples for local checks, shells, Kubernetes, automation, alerts, status, and sessions.
 
 ## License
 
