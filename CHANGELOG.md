@@ -2,7 +2,7 @@
 
 All notable changes to watchx will be documented here.
 
-## 0.1.0a1 - Unreleased
+## 0.1.0a1 - 2026-09-22
 
 - Initial project architecture.
 - Fullscreen Textual TUI skeleton.
