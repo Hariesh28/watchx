@@ -6,6 +6,8 @@ import tomllib
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from watchx.models import Trigger
+
 
 @dataclass(frozen=True, slots=True)
 class WatchConfig:
@@ -14,6 +16,7 @@ class WatchConfig:
     mouse: bool = True
     theme: str = "watchx-dark"
     history_size: int = 100
+    history_line_cap: int = 500
     fullscreen: bool = True
     shell: str | None = None
     stderr: str = "combined"
@@ -28,6 +31,8 @@ class WatchConfig:
     status_port: int = 0
     status_token: str | None = None
     export_session: Path | None = None
+    store_path: Path | None = None
+    triggers: tuple[Trigger, ...] = ()
 
 
 def config_path() -> Path:
@@ -65,6 +70,8 @@ def load_config(path: Path | None = None) -> WatchConfig:
         updates["theme"] = str(watch["theme"])
     if "history_size" in watch:
         updates["history_size"] = int(watch["history_size"])
+    if "history_line_cap" in watch:
+        updates["history_line_cap"] = int(watch["history_line_cap"])
     if "fullscreen" in watch:
         updates["fullscreen"] = bool(watch["fullscreen"])
     if "shell" in watch:
@@ -94,12 +101,28 @@ def load_config(path: Path | None = None) -> WatchConfig:
         updates["status_token"] = str(watch["status_token"]) or None
     if "export_session" in watch and watch["export_session"]:
         updates["export_session"] = Path(str(watch["export_session"]))
+    if "store_path" in watch and watch["store_path"]:
+        updates["store_path"] = Path(str(watch["store_path"]))
+    if "triggers" in watch and isinstance(watch["triggers"], list):
+        updates["triggers"] = tuple(
+            Trigger(
+                pattern=str(item.get("pattern", "")),
+                action=str(item.get("action", "exit_code")),
+                on_exit_code=(
+                    int(item["on_exit_code"]) if item.get("on_exit_code") is not None else None
+                ),
+            )
+            for item in watch["triggers"]
+            if isinstance(item, dict)
+        )
 
     config = replace(WatchConfig(), **updates)
     if config.interval_seconds <= 0:
         raise ValueError("watchx config interval_seconds must be greater than zero")
     if config.history_size < 1:
         raise ValueError("watchx config history_size must be at least 1")
+    if config.history_line_cap < 1:
+        raise ValueError("watchx config history_line_cap must be at least 1")
     if config.timeout_seconds is not None and config.timeout_seconds <= 0:
         raise ValueError("watchx config timeout_seconds must be greater than zero")
     if config.max_output_bytes < 1024:
@@ -112,6 +135,8 @@ def load_config(path: Path | None = None) -> WatchConfig:
         raise ValueError("watchx config status_port must be between 0 and 65535")
     if config.status_token is not None and len(config.status_token) < 16:
         raise ValueError("watchx config status_token must be at least 16 characters")
+    if any(trigger.action not in {"sound", "notify", "exit_code"} for trigger in config.triggers):
+        raise ValueError("watchx trigger action must be sound, notify, or exit_code")
     return config
 
 
@@ -126,6 +151,7 @@ diff = false
 mouse = true
 theme = "watchx-dark"
 history_size = 100
+history_line_cap = 500
 fullscreen = true
 shell = ""
 stderr = "combined"
@@ -138,6 +164,12 @@ fail_if = ""
 status_port = 0
 # Leave empty to generate a secure token at startup.
 status_token = ""
+store_path = ""
+
+# Optional alert rules:
+# [[watchx.triggers]]
+# pattern = "ERROR"
+# action = "exit_code"
 
 [watchx.environment]
 """,

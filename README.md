@@ -135,6 +135,9 @@ watchx --json --plain --timestamp --retry 2 --env ENV=production curl https://ex
 `--env KEY=VALUE` adds environment variables without replacing the parent environment.
 Use `--fail-if REGEX` to mark matching output as unhealthy; JSON frames include
 `alert_triggered`, and `--once` returns exit code 1 when the alert matches.
+Use repeatable `--trigger REGEX[:ACTION]` rules for `exit_code`, `sound`, or
+`notify` alerts. `--store .\watchx.db` enables queryable SQLite invocation
+history without changing JSONL session export.
 
 Expose the latest result to local monitors:
 

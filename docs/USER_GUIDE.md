@@ -254,6 +254,12 @@ history to the export path:
 watchx --history-size 500 --export-session .\deployment.jsonl kubectl get pods -A
 ```
 
+Use `--history-line-cap 500` to bound retained lines independently of frame
+count. For cross-session analytics, add `--store .\watchx.db`; the SQLite
+database stores runs and invocation timing/output while JSONL remains available
+for portable replay. Alert rules can be added with repeatable
+`--trigger "ERROR:notify"` or `--trigger "CrashLoopBackOff:exit_code"`.
+
 Replay a saved session without executing the original command:
 
 ```powershell

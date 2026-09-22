@@ -5,8 +5,10 @@ from watchx.cli import (
     normalize_command,
     parse_duration,
     parse_environment,
+    parse_triggers,
     resolve_config,
 )
+from watchx.models import Trigger
 
 
 def test_duration_parser() -> None:
@@ -76,3 +78,10 @@ def test_session_options_resolve(tmp_path) -> None:
     path = tmp_path / "frames.jsonl"
     args = build_parser().parse_args(["--export-session", str(path), "echo", "ok"])
     assert resolve_config(args).export_session == path
+
+
+def test_trigger_parser_supports_default_and_explicit_actions() -> None:
+    assert parse_triggers(["ERROR", "WARN:notify"]) == (
+        Trigger("ERROR"),
+        Trigger("WARN", "notify"),
+    )

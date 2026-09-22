@@ -19,6 +19,13 @@ class CommandSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class Trigger:
+    pattern: str = ""
+    action: str = "exit_code"
+    on_exit_code: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class CommandResult:
     stdout: str
     stderr: str

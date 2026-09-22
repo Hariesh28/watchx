@@ -13,13 +13,18 @@ from textual.timer import Timer
 from textual.widgets import Footer, Input, RichLog, Static
 from textual.worker import Worker, get_current_worker
 
+from watchx.alerts import dispatch, triggered
 from watchx.config import WatchConfig
-from watchx.diff import diff_lines
+from watchx.diff import DiffResult, diff_lines, intraline_spans
+from watchx.execution import run_with_retries
 from watchx.history import FrameHistory
 from watchx.models import CommandResult, CommandSpec, Frame
 from watchx.runner import CommandCancelled, CommandRunner
 from watchx.session import write_frames
 from watchx.status import StatusServer
+from watchx.store import RunStore
+
+RENDER_LINE_CAP = 2000
 
 
 class WatchXApp(App[int]):
@@ -55,7 +60,7 @@ class WatchXApp(App[int]):
             max_output_bytes=config.max_output_bytes,
             environment=config.environment,
         )
-        self.history = FrameHistory(config.history_size)
+        self.history = FrameHistory(config.history_size, config.history_line_cap)
         self.previous_lines: tuple[str, ...] | None = None
         self.sequence = 0
         self.last_result: CommandResult | None = None
@@ -66,7 +71,8 @@ class WatchXApp(App[int]):
         self.search_term = ""
         self.refresh_timer: Timer | None = None
         self.spinner_timer: Timer | None = None
-        self.active_worker: Worker[CommandResult] | None = None
+        self.active_worker: Worker[tuple[CommandResult, DiffResult | None]] | None = None
+        self.store = RunStore(config.store_path, spec.display) if config.store_path else None
         self.status_server = (
             StatusServer(config.status_port, self._status_snapshot) if config.status_port else None
         )
@@ -103,7 +109,7 @@ class WatchXApp(App[int]):
         payload["running"] = self.running
         payload["alert_triggered"] = self.last_result.alert_triggered(
             self.config.fail_if, self.config.stderr
-        )
+        ) or triggered(self.last_result, self.config.triggers, self.config.stderr)
         payload["ok"] = not (not self.last_result.ok or payload["alert_triggered"])
         return payload
 
@@ -112,6 +118,8 @@ class WatchXApp(App[int]):
             write_frames(self.config.export_session, self.history.snapshot())
         if self.status_server:
             self.status_server.close()
+        if self.store:
+            self.store.close()
 
     def _reset_refresh_timer(self) -> None:
         if self.refresh_timer:
@@ -170,15 +178,18 @@ class WatchXApp(App[int]):
             self._execute_once, thread=True, exclusive=False, exit_on_error=False
         )
 
-    def _execute_once(self) -> CommandResult:
+    def _execute_once(self) -> tuple[CommandResult, DiffResult | None]:
         """Execute exactly one command invocation outside the UI event loop."""
         worker = get_current_worker()
         try:
-            for attempt in range(self.config.retries + 1):
-                result = self.runner.run(should_cancel=lambda: worker.is_cancelled)
-                if result.ok or attempt == self.config.retries:
-                    return result
-            raise RuntimeError("retry loop ended without a command result")
+            result = run_with_retries(
+                self.runner,
+                self.config.retries,
+                should_cancel=lambda: worker.is_cancelled,
+            )
+            lines = tuple(result.output_for(self.config.stderr).splitlines())
+            diff = diff_lines(self.previous_lines, lines) if self.config.diff else None
+            return result, diff
         except CommandCancelled:
             raise
 
@@ -187,37 +198,46 @@ class WatchXApp(App[int]):
             return
         if event.worker.state.name == "SUCCESS":
             self.running = False
-            result = event.worker.result
-            if result is not None:
-                self._apply_result(result)
+            worker_result = event.worker.result
+            if worker_result is not None:
+                result, diff = worker_result
+                self._apply_result(result, diff)
         elif event.worker.state.name in {"ERROR", "CANCELLED"}:
             self.running = False
             self._render_status()
 
-    def _apply_result(self, result: CommandResult) -> None:
+    def _apply_result(self, result: CommandResult, diff: DiffResult | None = None) -> None:
         self.sequence += 1
         self.last_result = result
         lines = tuple(result.output_for(self.config.stderr).splitlines())
         frame = Frame(result=result, lines=lines, sequence=self.sequence)
         self.history.append(frame)
-        self._render_output(lines)
+        if self.store:
+            self.store.record(frame)
+        self._render_output(lines, diff)
         self.previous_lines = lines
         self._render_status()
 
-        failed = not result.ok or result.alert_triggered(self.config.fail_if, self.config.stderr)
+        trigger_exit = dispatch(result, self.config.triggers, self.config.stderr)
+        failed = (
+            not result.ok
+            or result.alert_triggered(self.config.fail_if, self.config.stderr)
+            or trigger_exit
+        )
         if self.config.once or (self.config.exit_on_error and failed):
             self.exit(result.exit_code if not result.ok else (1 if failed else 0))
 
-    def _render_output(self, lines: tuple[str, ...]) -> None:
+    def _render_output(self, lines: tuple[str, ...], diff: DiffResult | None = None) -> None:
         output = self.query_one("#output", RichLog)
         output.clear()
-        render_lines = lines
+        render_lines = lines[-RENDER_LINE_CAP:]
         if self.search_term:
             render_lines = tuple(line for line in lines if self.search_term in line.casefold())
 
         if self.config.diff:
-            diff = diff_lines(self.previous_lines, lines)
-            for item in diff.lines:
+            diff = diff or diff_lines(self.previous_lines, lines)
+            visible_diff = diff.lines[-RENDER_LINE_CAP:]
+            for item in visible_diff:
                 if self.search_term and self.search_term not in item.text.casefold():
                     continue
                 if item.kind == "added":
@@ -225,11 +245,22 @@ class WatchXApp(App[int]):
                 elif item.kind == "removed":
                     output.write(Text(f"- {item.text}", style="dim red"))
                 elif item.kind == "changed":
-                    output.write(Text(item.text, style="bold yellow"))
+                    text = Text()
+                    for chunk, changed in intraline_spans(item.previous_text or "", item.text):
+                        text.append(chunk, style="reverse bold yellow" if changed else "yellow")
+                    output.write(text)
                 else:
                     output.write(item.text)
             changed_label = f"↑ {diff.changed_count} changed"
         else:
+            if len(lines) > RENDER_LINE_CAP:
+                output.write(
+                    Text(
+                        f"... {len(lines) - RENDER_LINE_CAP} earlier lines hidden "
+                        "(full output retained)",
+                        style="dim",
+                    )
+                )
             for line in render_lines:
                 output.write(Text.from_ansi(line))
             changed_label = "diff off"

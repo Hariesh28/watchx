@@ -8,7 +8,7 @@ from pathlib import Path
 
 from watchx import __version__
 from watchx.config import WatchConfig, load_config, write_default_config
-from watchx.models import CommandSpec
+from watchx.models import CommandSpec, Trigger
 
 _DURATION_RE = re.compile(r"^([0-9]+(?:\.[0-9]+)?)(ms|s|m|h)?$", re.IGNORECASE)
 
@@ -54,6 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--theme", help="TUI theme name")
     parser.add_argument("--history-size", type=int, help="number of frames kept in memory")
+    parser.add_argument("--history-line-cap", type=int, help="maximum lines retained per frame")
     parser.add_argument(
         "--exit-on-error", action="store_true", help="stop watching after a command failure"
     )
@@ -80,10 +81,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--fail-if", metavar="REGEX", help="fail when output matches this regular expression"
     )
     parser.add_argument(
+        "--trigger",
+        action="append",
+        default=[],
+        metavar="REGEX[:ACTION]",
+        help="alert on output; ACTION is sound, notify, or exit_code",
+    )
+    parser.add_argument(
         "--status-port", type=int, default=None, help="serve localhost health JSON on this port"
     )
     parser.add_argument("--status-token", help="bearer token required for status endpoints")
     parser.add_argument("--export-session", type=str, help="save captured frames as JSONL on exit")
+    parser.add_argument("--store", type=str, help="append invocations to a SQLite database")
     parser.add_argument("--replay", type=str, help="replay a saved JSONL session and exit")
     parser.add_argument(
         "--replay-delay", type=parse_duration, default=0.0, help="delay between replayed frames"
@@ -113,6 +122,9 @@ def resolve_config(args: argparse.Namespace) -> WatchConfig:
         mouse=args.mouse if args.mouse is not None else config.mouse,
         theme=args.theme or config.theme,
         history_size=args.history_size if args.history_size is not None else config.history_size,
+        history_line_cap=args.history_line_cap
+        if args.history_line_cap is not None
+        else config.history_line_cap,
         fullscreen=not args.inline and not args.plain,
         shell=args.shell if args.shell is not None else config.shell,
         stderr=args.stderr or config.stderr,
@@ -131,9 +143,13 @@ def resolve_config(args: argparse.Namespace) -> WatchConfig:
         export_session=Path(args.export_session)
         if args.export_session is not None
         else config.export_session,
+        store_path=Path(args.store) if args.store is not None else config.store_path,
+        triggers=parse_triggers(args.trigger) if args.trigger else config.triggers,
     )
     if config.history_size < 1:
         raise ValueError("history size must be at least 1")
+    if config.history_line_cap < 1:
+        raise ValueError("history line cap must be at least 1")
     if config.timeout_seconds is not None and config.timeout_seconds <= 0:
         raise ValueError("timeout must be greater than zero")
     if config.max_output_bytes < 1024:
@@ -149,6 +165,14 @@ def resolve_config(args: argparse.Namespace) -> WatchConfig:
             re.compile(config.fail_if)
         except re.error as exc:
             raise ValueError(f"invalid fail-if regular expression: {exc}") from exc
+    for trigger in config.triggers:
+        if trigger.action not in {"sound", "notify", "exit_code"}:
+            raise ValueError("trigger action must be sound, notify, or exit_code")
+        if trigger.pattern:
+            try:
+                re.compile(trigger.pattern)
+            except re.error as exc:
+                raise ValueError(f"invalid trigger regular expression: {exc}") from exc
     return config
 
 
@@ -160,6 +184,18 @@ def parse_environment(values: list[str]) -> list[tuple[str, str]]:
             raise ValueError(f"invalid environment setting: {value!r}; use KEY=VALUE")
         result.append((key, setting))
     return result
+
+
+def parse_triggers(values: list[str]) -> tuple[Trigger, ...]:
+    result: list[Trigger] = []
+    for value in values:
+        pattern, separator, action = value.rpartition(":")
+        if not separator:
+            pattern, action = value, "exit_code"
+        if not pattern:
+            raise ValueError("trigger pattern must not be empty")
+        result.append(Trigger(pattern, action))
+    return tuple(result)
 
 
 def main(argv: list[str] | None = None) -> int:

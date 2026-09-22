@@ -15,3 +15,8 @@ All notable changes to watchx will be documented here.
 - Runtime, exit-code, interval, timeout, and output-size metrics.
 - TOML configuration.
 - CI scaffolding for Windows, Linux, and macOS.
+- Shared retry execution with cancellation-aware backoff.
+- Improved Windows shell quoting, output decoding, and graceful process termination.
+- Intraline diffs, bounded history rendering, and selectable frame details in the TUI.
+- Opt-in SQLite invocation storage and configurable alert triggers.
+- Regression coverage for the new diff, alert, storage, and configuration paths.

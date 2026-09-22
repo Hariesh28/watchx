@@ -55,3 +55,16 @@ def test_invalid_stderr_mode_is_rejected(tmp_path: Path) -> None:
         assert "stderr" in str(exc)
     else:
         raise AssertionError("invalid stderr mode was accepted")
+
+
+def test_history_line_cap_and_store_path_load(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text(
+        '[watchx]\nhistory_line_cap = 25\nstore_path = "watchx.db"\n',
+        encoding="utf-8",
+    )
+
+    config = load_config(path)
+
+    assert config.history_line_cap == 25
+    assert config.store_path == Path("watchx.db")

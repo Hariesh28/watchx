@@ -9,11 +9,14 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.text import Text
 
+from watchx.alerts import dispatch, triggered
 from watchx.config import WatchConfig
+from watchx.execution import run_with_retries
 from watchx.models import CommandSpec, Frame
 from watchx.runner import CommandRunner
 from watchx.session import write_frames
 from watchx.status import StatusServer
+from watchx.store import RunStore
 
 
 def _render(spec: CommandSpec, result, frame: int, config: WatchConfig) -> Panel:
@@ -27,17 +30,12 @@ def _render(spec: CommandSpec, result, frame: int, config: WatchConfig) -> Panel
     return Panel(text, title=f" WATCHX  {spec.display} ", subtitle=footer)
 
 
-def _run_once(runner: CommandRunner, retries: int):
-    for attempt in range(retries + 1):
-        result = runner.run()
-        if result.ok or attempt == retries:
-            return result
-        time.sleep(min(1.0, 0.1 * (attempt + 1)))
-    raise RuntimeError("unreachable retry state")
-
-
 def _failed(result, config: WatchConfig) -> bool:
-    return not result.ok or result.alert_triggered(config.fail_if, config.stderr)
+    return (
+        not result.ok
+        or result.alert_triggered(config.fail_if, config.stderr)
+        or triggered(result, config.triggers, config.stderr)
+    )
 
 
 def run_inline(
@@ -59,28 +57,34 @@ def run_inline(
         if config.status_port
         else None
     )
+    store = RunStore(config.store_path, spec.display) if config.store_path else None
 
     def record(command_result, sequence: int) -> bool:
-        triggered = command_result.alert_triggered(config.fail_if, config.stderr)
+        fail_if_triggered = command_result.alert_triggered(config.fail_if, config.stderr)
+        trigger_exit = dispatch(command_result, config.triggers, config.stderr)
         captured.append(
             Frame(
                 command_result,
-                tuple(command_result.output_for(config.stderr).splitlines()),
+                tuple(command_result.output_for(config.stderr).splitlines())[
+                    -config.history_line_cap :
+                ],
                 sequence,
             )
         )
+        if store:
+            store.record(captured[-1])
         latest.update(command_result.as_dict(sequence))
-        latest["alert_triggered"] = triggered
+        latest["alert_triggered"] = fail_if_triggered or trigger_exit
         latest["ok"] = not _failed(command_result, config)
         latest["running"] = False
-        return triggered
+        return fail_if_triggered or trigger_exit
 
     try:
         if status:
             status.start()
             print(f"watchx status server: http://127.0.0.1:{status.port}/health", file=sys.stderr)
             print(f"watchx status token: {status.token}", file=sys.stderr)
-        first = _run_once(runner, config.retries)
+        first = run_with_retries(runner, config.retries)
         first_alert = record(first, 1)
         if json_output:
             payload = first.as_dict(1)
@@ -93,7 +97,7 @@ def run_inline(
             while True:
                 time.sleep(config.interval_seconds)
                 frame += 1
-                result = _run_once(runner, config.retries)
+                result = run_with_retries(runner, config.retries)
                 alert_triggered = record(result, frame)
                 payload = result.as_dict(frame)
                 payload["alert_triggered"] = alert_triggered
@@ -106,11 +110,7 @@ def run_inline(
                 print(first.output_for(config.stderr).rstrip() or "<no output>")
             else:
                 print(first.output_for(config.stderr).rstrip() or "<no output>")
-            return (
-                first.exit_code
-                if not first.ok
-                else (1 if first.alert_triggered(config.fail_if, config.stderr) else 0)
-            )
+            return first.exit_code if not first.ok else (1 if first_alert else 0)
         initial = (
             Text(first.output_for(config.stderr).rstrip() or "<no output>")
             if plain
@@ -121,7 +121,7 @@ def run_inline(
             while True:
                 time.sleep(config.interval_seconds)
                 frame += 1
-                result = _run_once(runner, config.retries)
+                result = run_with_retries(runner, config.retries)
                 record(result, frame)
                 live.update(
                     Text(result.output_for(config.stderr).rstrip() or "<no output>")
@@ -138,6 +138,8 @@ def run_inline(
             write_frames(config.export_session, tuple(captured))
         if status:
             status.close()
+        if store:
+            store.close()
 
 
 def run_plain(spec: CommandSpec, config: WatchConfig) -> int:
