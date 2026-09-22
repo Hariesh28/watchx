@@ -58,7 +58,7 @@ class CommandRunner:
         if os.name == "nt":
             creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
 
-        process = subprocess.Popen(
+        process: subprocess.Popen[bytes] = subprocess.Popen(
             argv,
             shell=shell,
             stdout=subprocess.PIPE,
@@ -96,11 +96,11 @@ class CommandRunner:
             raise
 
         duration_ms = (time.perf_counter() - start) * 1000
-        stdout = self._truncate(_decode_output(stdout))
-        stderr = self._truncate(_decode_output(stderr))
+        stdout_text = self._truncate(_decode_output(stdout))
+        stderr_text = self._truncate(_decode_output(stderr))
         return CommandResult(
-            stdout=stdout,
-            stderr=stderr,
+            stdout=stdout_text,
+            stderr=stderr_text,
             exit_code=process.returncode if process.returncode is not None else 1,
             duration_ms=duration_ms,
             started_at=started,
@@ -115,7 +115,7 @@ class CommandRunner:
         return truncated + "\n… [output truncated by watchx]"
 
     @staticmethod
-    def _terminate(process: subprocess.Popen[str]) -> None:
+    def _terminate(process: subprocess.Popen[bytes]) -> None:
         if process.poll() is not None:
             return
         if os.name == "nt":
@@ -132,13 +132,13 @@ class CommandRunner:
             )
         else:
             try:
-                os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                os.killpg(os.getpgid(process.pid), signal.SIGTERM)  # type: ignore[attr-defined]
             except ProcessLookupError:
                 return
             try:
                 process.wait(timeout=1.5)
             except subprocess.TimeoutExpired:
-                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                os.killpg(os.getpgid(process.pid), signal.SIGKILL)  # type: ignore[attr-defined]
 
 
 def _quote_for_powershell(argv: tuple[str, ...]) -> str:

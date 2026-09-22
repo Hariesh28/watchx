@@ -5,6 +5,7 @@ import sys
 import tomllib
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import TypedDict
 
 from watchx.models import Trigger
 
@@ -35,6 +36,30 @@ class WatchConfig:
     triggers: tuple[Trigger, ...] = ()
 
 
+class ConfigUpdates(TypedDict, total=False):
+    interval_seconds: float
+    diff: bool
+    mouse: bool
+    theme: str
+    history_size: int
+    history_line_cap: int
+    fullscreen: bool
+    shell: str | None
+    stderr: str
+    exit_on_error: bool
+    timeout_seconds: float | None
+    max_output_bytes: int
+    retries: int
+    timestamp: bool
+    environment: tuple[tuple[str, str], ...]
+    fail_if: str | None
+    status_port: int
+    status_token: str | None
+    export_session: Path
+    store_path: Path
+    triggers: tuple[Trigger, ...]
+
+
 def config_path() -> Path:
     if sys.platform == "win32":
         base = Path(os.environ.get("APPDATA", Path.home()))
@@ -59,7 +84,7 @@ def load_config(path: Path | None = None) -> WatchConfig:
 
     raw_shell = watch.get("shell")
     shell = raw_shell or None
-    updates: dict[str, object] = {}
+    updates: ConfigUpdates = {}
     if "interval_seconds" in watch:
         updates["interval_seconds"] = float(watch["interval_seconds"])
     if "diff" in watch:

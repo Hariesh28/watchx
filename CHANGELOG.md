@@ -2,6 +2,12 @@
 
 All notable changes to watchx will be documented here.
 
+## Unreleased
+
+- Cleaned up strict typing across command execution, configuration loading,
+  inline rendering, Textual actions, and SQLite storage.
+- Added explicit handling for an unexpected missing SQLite run identifier.
+
 ## 0.1.0a1 - 2026-09-22
 
 - Initial project architecture.

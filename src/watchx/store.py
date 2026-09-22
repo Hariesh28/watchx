@@ -51,6 +51,8 @@ class RunStore:
             "INSERT INTO runs(command_display, started_at) VALUES (?, ?)",
             (command_display, datetime.now().isoformat()),
         )
+        if cursor.lastrowid is None:
+            raise RuntimeError("SQLite did not return the new run ID")
         self.run_id = int(cursor.lastrowid)
 
     def record(self, frame: Frame) -> None:

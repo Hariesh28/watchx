@@ -276,7 +276,7 @@ class WatchXApp(App[int]):
                 f"#{self.sequence}  •  {changed_label}"
             )
 
-    def action_quit(self) -> None:
+    async def action_quit(self) -> None:
         if self.active_worker and self.active_worker.state.name == "RUNNING":
             self.active_worker.cancel()
         self.exit(self.last_result.exit_code if self.last_result and not self.last_result.ok else 0)

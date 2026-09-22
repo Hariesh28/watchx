@@ -12,14 +12,14 @@ from rich.text import Text
 from watchx.alerts import dispatch, triggered
 from watchx.config import WatchConfig
 from watchx.execution import run_with_retries
-from watchx.models import CommandSpec, Frame
+from watchx.models import CommandResult, CommandSpec, Frame
 from watchx.runner import CommandRunner
 from watchx.session import write_frames
 from watchx.status import StatusServer
 from watchx.store import RunStore
 
 
-def _render(spec: CommandSpec, result, frame: int, config: WatchConfig) -> Panel:
+def _render(spec: CommandSpec, result: CommandResult, frame: int, config: WatchConfig) -> Panel:
     body = result.output_for(config.stderr).rstrip() or "<no output>"
     status = "OK" if result.ok else f"EXIT {result.exit_code}"
     footer = f"{status}  •  {result.duration_ms:.0f}ms"
@@ -30,7 +30,7 @@ def _render(spec: CommandSpec, result, frame: int, config: WatchConfig) -> Panel
     return Panel(text, title=f" WATCHX  {spec.display} ", subtitle=footer)
 
 
-def _failed(result, config: WatchConfig) -> bool:
+def _failed(result: CommandResult, config: WatchConfig) -> bool:
     return (
         not result.ok
         or result.alert_triggered(config.fail_if, config.stderr)
@@ -59,7 +59,7 @@ def run_inline(
     )
     store = RunStore(config.store_path, spec.display) if config.store_path else None
 
-    def record(command_result, sequence: int) -> bool:
+    def record(command_result: CommandResult, sequence: int) -> bool:
         fail_if_triggered = command_result.alert_triggered(config.fail_if, config.stderr)
         trigger_exit = dispatch(command_result, config.triggers, config.stderr)
         captured.append(
